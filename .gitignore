@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+
+# Herramientas locales de preview / agentes
+.claude/
+.playwright-mcp/
+
+# Editores
+.vscode/
+.idea/
