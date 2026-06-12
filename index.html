@@ -250,6 +250,13 @@
   .dc-amt{font-size:24px}
   details{margin-bottom:8px}
 
+  /* ====== Rejilla: [Resumen | Fichas] en dos columnas ====== */
+  .info-grid{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;
+    width:100%;max-width:900px;margin-bottom:8px}
+  .info-grid .hint{flex:1 1 300px;margin:0;display:flex;flex-direction:column;justify-content:center}
+  .info-grid .tray{flex:1 1 360px;margin:0;display:flex;flex-direction:column;justify-content:center}
+  .info-grid .tray-title{margin-bottom:6px}
+
   /* ====== Botones de acción más grandes y centrados ====== */
   .controls{gap:16px;margin:16px 0;justify-content:center}
   .controls button{font-size:19px;padding:18px 34px;min-width:160px}
@@ -289,6 +296,8 @@
     .dc-amt{font-size:18px}
     .dc-label{font-size:9px}
     button{font-size:13px;padding:8px 12px}
+    .info-grid{gap:8px;margin-bottom:6px}
+    .info-grid .hint,.info-grid .tray{flex:1 1 100%}
     .controls{gap:10px;margin:12px 0}
     .controls button{font-size:16px;padding:14px 20px;min-width:128px}
     .bet-spot{min-width:54px;padding:4px 6px}
@@ -356,25 +365,29 @@
     <div><div class="label">Manos</div><span id="hands" style="color:var(--white)">0</span></div>
   </div>
 
-  <div class="msg pixel-border" id="message">Pon tu apuesta base y pulsa <b>REPARTIR</b> para empezar.</div>
+  <div class="info-grid">
+    <div class="hint pixel-border" id="strategyHint"></div>
 
-  <div class="tray pixel-border" id="tray">
-    <div class="tray-title">🪙 Arrastra fichas al círculo · Ante = Blind</div>
-    <div class="tray-row">
-      <div class="rack">
-        <div class="chip-token c5"   draggable="true" data-val="5">$5</div>
-        <div class="chip-token c25"  draggable="true" data-val="25">$25</div>
-        <div class="chip-token c100" draggable="true" data-val="100">$100</div>
-        <div class="chip-token c500" draggable="true" data-val="500">$500</div>
+    <div class="tray pixel-border" id="tray">
+      <div class="tray-title">🪙 Arrastra fichas al círculo · Ante = Blind</div>
+      <div class="tray-row">
+        <div class="rack">
+          <div class="chip-token c5"   draggable="true" data-val="5">$5</div>
+          <div class="chip-token c25"  draggable="true" data-val="25">$25</div>
+          <div class="chip-token c100" draggable="true" data-val="100">$100</div>
+          <div class="chip-token c500" draggable="true" data-val="500">$500</div>
+        </div>
+        <div class="drop-circle" id="dropCircle">
+          <div class="dc-label">Ante + Blind</div>
+          <div class="dc-amt" id="dcAmt">$0</div>
+          <div class="dc-stack" id="dcStack"></div>
+        </div>
+        <button id="clearBet" class="danger" style="padding:8px 14px">Limpiar</button>
       </div>
-      <div class="drop-circle" id="dropCircle">
-        <div class="dc-label">Ante + Blind</div>
-        <div class="dc-amt" id="dcAmt">$0</div>
-        <div class="dc-stack" id="dcStack"></div>
-      </div>
-      <button id="clearBet" class="danger" style="padding:8px 14px">Limpiar</button>
     </div>
   </div>
+
+  <div class="msg pixel-border" id="message">Pon tu apuesta base y pulsa <b>REPARTIR</b> para empezar.</div>
 
   <div class="table pixel-border">
     <div class="seat dealer">
@@ -399,8 +412,6 @@
   </div>
 
   <div class="controls" id="controls"></div>
-
-  <div class="hint pixel-border" id="strategyHint"></div>
 
   <details class="pixel-border" style="padding:10px;margin-top:12px">
     <summary>📖 Reglas y tablas de pago</summary>
