@@ -605,7 +605,6 @@ function cmp(a,b){
 // =========================================================
 //  TABLAS DE PAGO
 // =========================================================
-const BLIND_PAY = {8:'real',7:10,6:3,5:1.5,4:1}; // se calcula aparte por escalera real/color
 function blindPayout(rank){
   const [cat,top]=rank;
   if(cat===8) return top===14?500:50;     // real vs color
@@ -627,41 +626,114 @@ function tripsPayout(rank){
 }
 
 // =========================================================
-//  ESTRATEGIA ÓPTIMA (sugerencias)
+//  COACH POR VALOR ESPERADO (EV)
+//  En vez de reglas "a ojo", calculamos el EV real de cada
+//  decisión y recomendamos la de mayor EV. Así la sugerencia
+//  SIEMPRE es consistente con las probabilidades mostradas.
+//  EV se expresa en unidades de tu Ante (p.ej. +0.42 = ganas
+//  en promedio 0.42× tu Ante con esa acción).
 // =========================================================
-function preflopAdvice(p){
-  const [c1,c2]=p;
-  const hi=Math.max(c1.v,c2.v), lo=Math.min(c1.v,c2.v);
-  const suited=c1.s===c2.s, pair=c1.v===c2.v;
-  // Reglas estándar para apostar 4x:
-  if(pair && hi>=3) return true;            // par de 3 o mejor
-  if(hi===14) return true;                  // cualquier As
-  if(hi===13){ return suited ? lo>=5 : lo>=12; } // K-5s+ / K-Qo+? -> usamos K9o+ simplificado
-  if(hi===13 && !suited && lo>=9) return true;
-  if(hi===12){ return suited ? lo>=8 : lo>=10; }
-  if(hi===11){ return suited ? lo>=8 : lo>=10; }
+const EV_SAMPLES = 2000;
+
+// Resultado neto de Ante+Blind+Play en unidades de Ante (Blind/Ante=1, Play=mult).
+function handNetUnits(pRank, dRank, playMult, folded){
+  if(folded) return -2;                       // pierdes Ante+Blind
+  const dealerQualifies = dRank[0]>=1;        // pareja o mejor
+  const c = cmp(pRank, dRank);
+  let net=0;
+  // Ante: push si el dealer no liga
+  if(dealerQualifies){ if(c>0) net+=1; else if(c<0) net-=1; }
+  // Play: 1:1 (push en empate)
+  if(c>0) net+=playMult; else if(c<0) net-=playMult;
+  // Blind: paga según tu mano final si ganas; push si <escalera; pierde si pierdes
+  if(c>0){ const bp=blindPayout(pRank); if(bp>0) net+=bp; }
+  else if(c<0) net-=1;
+  return net;
+}
+
+// --- Heurísticas (casi óptimas) para modelar las decisiones FUTURAS dentro del rollout ---
+function fourFlushWithHole(player, board){
+  const all=[...player,...board], bySuit={};
+  all.forEach(c=>bySuit[c.s]=(bySuit[c.s]||0)+1);
+  for(const s in bySuit){ if(bySuit[s]>=4 && player.some(c=>c.s===s)) return true; }
   return false;
 }
-function flopAdvice(p,board){
-  // Apuesta 2x con par (usando una carta tuya) o mejor, o 4 al color
-  const seven=[...p,...board];
-  const ev=evaluate7([...p,...board]);
-  if(ev.rank[0]>=2) return true; // doble par o mejor
-  // par usando una carta propia
-  for(const pc of p){
-    if(board.some(b=>b.v===pc.v)||p[0].v===p[1].v) return true;
+function riverBetHeuristic(pFullRank, player){
+  if(pFullRank[0]>=2) return true;                          // doble pareja o mejor
+  if(pFullRank[0]===1) return player.some(c=>c.v===pFullRank[1]); // pareja con carta propia
+  return false;
+}
+function flopBetHeuristic(player, flop){
+  const ev=evaluate7([...player,...flop]).rank;
+  if(ev[0]>=2) return true;
+  if(ev[0]===1 && player.some(c=>c.v===ev[1])) return true;
+  return fourFlushWithHole(player, flop);
+}
+
+// --- RIVER: EV exacto enumerando las C(45,2)=990 manos posibles del dealer ---
+function riverEV(player, board){
+  const used=new Set([...player,...board].map(c=>c.r+c.s));
+  const rem=[];
+  for(const s of SUITS) for(const r of RANKS){ if(!used.has(r+s)) rem.push({r,s,v:RVAL[r]}); }
+  const pRank=evaluate7([...player,...board]).rank;
+  let betSum=0,n=0,win=0,tie=0,lose=0;
+  for(let i=0;i<rem.length;i++) for(let j=i+1;j<rem.length;j++){
+    const dRank=evaluate7([rem[i],rem[j],...board]).rank;
+    const c=cmp(pRank,dRank);
+    if(c>0)win++; else if(c<0)lose++; else tie++;
+    betSum+=handNetUnits(pRank,dRank,1,false);
+    n++;
   }
-  // 4 al color
-  const bySuit={}; seven.forEach(c=>bySuit[c.s]=(bySuit[c.s]||0)+1);
-  if(Object.values(bySuit).some(n=>n>=4)) return true;
-  return false;
+  return {betEV:betSum/n, altEV:-2, win:win/n*100, tie:tie/n*100, lose:lose/n*100};
 }
-function riverAdvice(p,board){
-  // Apuesta si tienes par o mejor; foldea si las 5 comunitarias te superan
-  const ev=evaluate7([...p,...board]);
-  if(ev.rank[0]>=1) return 'bet';
-  // si no ligas nada con tus cartas -> evalúa hipotético contra mano "media"
-  return 'fold';
+
+// --- PRE-FLOP / FLOP: EV por Monte Carlo de "apostar ahora" vs "check (y jugar óptimo después)" ---
+function rolloutEV(player, knownBoard, betMult, samples){
+  const used=new Set([...player,...knownBoard].map(c=>c.r+c.s));
+  const rem=[];
+  for(const s of SUITS) for(const r of RANKS){ if(!used.has(r+s)) rem.push({r,s,v:RVAL[r]}); }
+  const fill=5-knownBoard.length, need=2+fill;
+  let betSum=0,altSum=0,win=0,tie=0,lose=0;
+  for(let s=0;s<samples;s++){
+    for(let k=0;k<need;k++){ const j=k+(Math.random()*(rem.length-k)|0); const t=rem[k];rem[k]=rem[j];rem[j]=t; }
+    const dealer=[rem[0],rem[1]];
+    const full=knownBoard.concat(rem.slice(2,2+fill)); // 5 comunitarias finales
+    const pFull=evaluate7([...player,...full]).rank;
+    const dFull=evaluate7([...dealer,...full]).rank;
+    const c=cmp(pFull,dFull);
+    if(c>0)win++; else if(c<0)lose++; else tie++;
+    // Apostar ahora (mult fijo) y llegar al showdown
+    betSum+=handNetUnits(pFull,dFull,betMult,false);
+    // Check: jugar óptimo las calles siguientes (heurística sobre info visible)
+    altSum+=checkRolloutNet(player,knownBoard,full,pFull,dFull);
+  }
+  return {betEV:betSum/samples, altEV:altSum/samples, win:win/samples*100, tie:tie/samples*100, lose:lose/samples*100};
+}
+function checkRolloutNet(player, knownBoard, full, pFull, dFull){
+  if(knownBoard.length===0){            // pre-flop -> decisión de flop y luego river
+    if(flopBetHeuristic(player, full.slice(0,3))) return handNetUnits(pFull,dFull,2,false);
+    if(riverBetHeuristic(pFull, player)) return handNetUnits(pFull,dFull,1,false);
+    return -2;                          // fold en el river
+  }
+  // flop conocido -> solo decisión de river
+  if(riverBetHeuristic(pFull, player)) return handNetUnits(pFull,dFull,1,false);
+  return -2;
+}
+
+// --- Línea de sugerencia: recomienda la acción de mayor EV y muestra ambos ---
+function fmtEV(x){ return (x>=0?'+':'')+x.toFixed(2); }
+function coachLine(player, board, stage){
+  let r, betLabel, altLabel;
+  if(stage==='river'){ r=riverEV(player, board); betLabel='APOSTAR 1×'; altLabel='FOLD'; }
+  else if(stage==='flop'){ r=rolloutEV(player, board, 2, EV_SAMPLES); betLabel='APOSTAR 2×'; altLabel='CHECK'; }
+  else { r=rolloutEV(player, [], 4, EV_SAMPLES); betLabel='APOSTAR 4×'; altLabel='CHECK'; }
+  const betBest=r.betEV>=r.altEV;
+  const rec=betBest?betLabel:altLabel;
+  const betCls=r.betEV>=0?'win':'lose', altCls=r.altEV>=0?'win':'lose';
+  const bar=`<span class="prob-bar"><i class="pw" style="width:${r.win}%"></i><i class="pt" style="width:${r.tie}%"></i><i class="pl" style="width:${r.lose}%"></i></span>`;
+  return `<b>Sugerencia:</b> <b style="color:var(--gold)">${rec}</b> `+
+    `<span title="EV en unidades de tu Ante">— ${betLabel.split(' ')[0]} EV <b class="${betCls}">${fmtEV(r.betEV)}</b> · ${altLabel} <b class="${altCls}">${fmtEV(r.altEV)}</b></span>`+
+    `<br>${r.win.toFixed(0)}% gana · ${r.tie.toFixed(0)}% emp · ${r.lose.toFixed(0)}% pierde ${bar}`;
 }
 
 // =========================================================
@@ -740,31 +812,6 @@ function syncBet(){
   }
 }
 
-// ====== Probabilidad de ganar la mano (Monte Carlo) ======
-function winProb(player, knownBoard, samples=1400){
-  const used=new Set([...player,...knownBoard].map(c=>c.r+c.s));
-  const rem=[];
-  for(const s of SUITS) for(const r of RANKS){ if(!used.has(r+s)) rem.push({r,s,v:RVAL[r]}); }
-  const fill=5-knownBoard.length, need=2+fill;
-  let win=0,tie=0,lose=0;
-  for(let i=0;i<samples;i++){
-    // Fisher-Yates parcial sobre el mismo arreglo (reaprovecha la mezcla previa)
-    for(let k=0;k<need;k++){ const j=k+(Math.random()*(rem.length-k)|0); const t=rem[k];rem[k]=rem[j];rem[j]=t; }
-    const dealer=[rem[0],rem[1]];
-    const board=knownBoard.concat(rem.slice(2,2+fill));
-    const c=cmp(evaluate7([...player,...board]).rank, evaluate7([...dealer,...board]).rank);
-    if(c>0)win++; else if(c<0)lose++; else tie++;
-  }
-  return {win:win/samples*100, tie:tie/samples*100, lose:lose/samples*100};
-}
-function probLine(player, board){
-  const {win,tie,lose}=winProb(player, board);
-  return `<span class="win">${win.toFixed(0)}%</span> gana · ${tie.toFixed(0)}% empate · <span class="lose">${lose.toFixed(0)}%</span> pierde`+
-    `<span class="prob-bar"><i class="pw" style="width:${win}%"></i>`+
-    `<i class="pt" style="width:${tie}%"></i>`+
-    `<i class="pl" style="width:${lose}%"></i></span>`;
-}
-
 // --- Inicio de mano ---
 function deal(){
   if(state.ante<5){ setMsg('<span class="lose">Arrastra al menos una ficha ($5 mínimo) al círculo.</span>'); return; }
@@ -786,9 +833,8 @@ function deal(){
   els.boardStage.textContent='pre-flop';
   refreshHUD();
 
-  const adv=preflopAdvice(state.player);
   setMsg('<b>PRE-FLOP.</b> ¿Apuestas 4× ahora o esperas (check)?');
-  setHint(`<b>Sugerencia:</b> ${adv?'APOSTAR 4× (fuerte)':'CHECK (espera al flop)'}<br>${probLine(state.player, [])}`);
+  setHint(coachLine(state.player, [], 'preflop'));
   setControls(
     btn('Apostar 4×','go',()=>makePlay(4)),
     btn('Check','cool',()=>{Sound.check();goFlop();})
@@ -809,9 +855,8 @@ function goFlop(){
   state.stage='flop';
   renderCards(els.boardCards,state.board.slice(0,3));
   els.boardStage.textContent='flop';
-  const adv=flopAdvice(state.player,state.board.slice(0,3));
   setMsg('<b>FLOP.</b> ¿Apuestas 2× o esperas al river?');
-  setHint(`<b>Sugerencia:</b> ${adv?'APOSTAR 2× (tienes con qué)':'CHECK (espera la última carta)'}<br>${probLine(state.player, state.board.slice(0,3))}`);
+  setHint(coachLine(state.player, state.board.slice(0,3), 'flop'));
   setControls(
     btn('Apostar 2×','go',()=>makePlay(2)),
     btn('Check','cool',()=>{Sound.check();goRiver();})
@@ -822,9 +867,8 @@ function goRiver(){
   state.stage='river';
   renderCards(els.boardCards,state.board);
   els.boardStage.textContent='river';
-  const adv=riverAdvice(state.player,state.board);
   setMsg('<b>RIVER.</b> Última decisión: apuesta 1× o retírate (pierdes Ante+Blind).');
-  setHint(`<b>Sugerencia:</b> ${adv==='bet'?'APOSTAR 1× (ligas algo)':'FOLD (no ligas nada)'}<br>${probLine(state.player, state.board)}`);
+  setHint(coachLine(state.player, state.board, 'river'));
   setControls(
     btn('Apostar 1×','go',()=>makePlay(1)),
     btn('Fold','danger',()=>fold())
@@ -919,14 +963,10 @@ function finish(headline, log){
   const next=btn('Nueva mano','go',()=>{Sound.ui();readyState();});
   if(state.bankroll<30){ // ni para la mano mínima completa ($5 ante × 6)
     setControls(btn('Reiniciar bankroll','cool',()=>{state.bankroll=1000;readyState();}));
-    setHint(getHintBase()+' <span class="lose">¡Sin fondos! Reinicia para seguir.</span>');
+    setHint('<span class="lose">¡Sin fondos! Reinicia para seguir.</span>');
   } else {
     setControls(next);
   }
-}
-
-function getHintBase(){
-  return state.hands>0?'':'';
 }
 
 // --- Pantalla de apuesta inicial ---
