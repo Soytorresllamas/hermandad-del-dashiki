@@ -79,6 +79,9 @@
     animation:deal .25s ease-out;
   }
   @keyframes deal{from{transform:translateY(-12px) scale(.9);opacity:0}to{transform:none;opacity:1}}
+  /* Volteo de las cartas del dealer al mostrarlas */
+  @keyframes flipIn{0%{transform:perspective(420px) rotateY(90deg);opacity:.15}100%{transform:perspective(420px) rotateY(0);opacity:1}}
+  .card.flip{animation:flipIn .42s ease-out}
   .card .corner{font-size:18px;font-weight:bold;line-height:1}
   .card .corner.bottom{align-self:flex-end;transform:rotate(180deg)}
   .card .pip{font-size:30px;text-align:center}
@@ -398,6 +401,11 @@
         <span id="anteVal" style="color:var(--gold);font-size:18px">$10</span>
         <button id="antePlus" style="padding:2px 8px">+</button>
       </div>
+      <div><div class="label">Trips ✦</div>
+        <button id="tripsMinus" style="padding:2px 8px">-</button>
+        <span id="tripsVal" style="color:#c9a7ff;font-size:18px">$0</span>
+        <button id="tripsPlus" style="padding:2px 8px">+</button>
+      </div>
       <div><div class="label">En juego</div><span class="chip" id="inplay">$0</span></div>
       <div><div class="label">Manos</div><span id="hands" style="color:var(--white)">0</span></div>
     </div>
@@ -424,7 +432,8 @@
     <summary>📖 Reglas y tablas de pago</summary>
     <p style="margin:8px 0;color:var(--white)">
       Apuestas <b>Ante</b> y <b>Blind</b> iguales. Tienes 3 oportunidades para la apuesta <b>Play</b>:
-      4× pre-flop, 2× en el flop, o 1× en el river (o retirarte y perder Ante+Blind).
+      <b>3× o 4×</b> pre-flop, 2× en el flop, o 1× en el river (o retirarte y perder Ante+Blind).
+      El <b>Trips ✦</b> es una apuesta lateral independiente: la pones aparte y paga según tu mano final (desde trío), gane o pierda la mano.
     </p>
     <table>
       <tr><th>Blind paga</th><th></th><th>Trips paga (✦ opcional)</th><th></th></tr>
@@ -494,16 +503,21 @@ let state = {
   player: [], dealer: [], board: [],
   bets: { ante:0, blind:0, play:0, trips:0 },
   stage: 'idle',     // idle | preflop | flop | river | done
-  playMade: false,
   hands: 0,
-  useTrips: false
+  trips: 0,          // apuesta lateral Trips INDEPENDIENTE (en $, no atada al Ante)
+  // --- estadísticas de sesión (persisten en localStorage) ---
+  net: 0,            // P/L acumulado de la sesión
+  decisions: 0,      // nº de decisiones de Play tomadas
+  followed: 0,       // cuántas coincidieron con el coach
+  recBet: false,     // recomendación del coach en la decisión actual (apostar=true)
+  handStart: 1000    // bankroll al inicio de la mano (para calcular el neto)
 };
 
 // ---- DOM ----
 const $ = id => document.getElementById(id);
 const els = {
   bankroll:$('bankroll'), inplay:$('inplay'), hands:$('hands'),
-  anteVal:$('anteVal'), message:$('message'),
+  anteVal:$('anteVal'), tripsVal:$('tripsVal'), message:$('message'),
   dealerCards:$('dealerCards'), boardCards:$('boardCards'), playerCards:$('playerCards'),
   boardStage:$('boardStage'),
   betAnte:$('betAnte'), betBlind:$('betBlind'), betPlay:$('betPlay'), betTrips:$('betTrips'),
@@ -520,10 +534,10 @@ function newDeck(){
 }
 
 // ---- Render de una carta ----
-function cardHTML(c, faceDown=false, winner=false){
+function cardHTML(c, faceDown=false, winner=false, flip=false){
   if(faceDown) return `<div class="card back"></div>`;
   const color = RED.has(c.s)?'red':'black';
-  return `<div class="card ${color}${winner?' winner':''}">
+  return `<div class="card ${color}${winner?' winner':''}${flip?' flip':''}">
     <div class="corner top">${c.r}${c.s}</div>
     <div class="pip">${c.s}</div>
     <div class="corner bottom">${c.r}${c.s}</div>
@@ -531,9 +545,9 @@ function cardHTML(c, faceDown=false, winner=false){
 }
 
 function renderCards(el, cards, opts={}){
-  const {hideAll=false, winners=new Set()} = opts;
+  const {hideAll=false, winners=new Set(), flip=false} = opts;
   el.innerHTML = cards.map((c,i)=>
-    cardHTML(c, hideAll, winners.has(c.r+c.s))
+    cardHTML(c, hideAll, winners.has(c.r+c.s), flip)
   ).join('') || '<span style="color:var(--panel-lt);font-size:11px">—</span>';
 }
 
@@ -728,6 +742,7 @@ function coachLine(player, board, stage){
   else if(stage==='flop'){ r=rolloutEV(player, board, 2, EV_SAMPLES); betLabel='APOSTAR 2×'; altLabel='CHECK'; }
   else { r=rolloutEV(player, [], 4, EV_SAMPLES); betLabel='APOSTAR 4×'; altLabel='CHECK'; }
   const betBest=r.betEV>=r.altEV;
+  state.recBet=betBest; // para medir tu adherencia al coach
   const rec=betBest?betLabel:altLabel;
   const betCls=r.betEV>=0?'win':'lose', altCls=r.altEV>=0?'win':'lose';
   const bar=`<span class="prob-bar"><i class="pw" style="width:${r.win}%"></i><i class="pt" style="width:${r.tie}%"></i><i class="pl" style="width:${r.lose}%"></i></span>`;
@@ -742,6 +757,7 @@ function coachLine(player, board, stage){
 function refreshHUD(){
   els.bankroll.textContent='$'+state.bankroll;
   els.anteVal.textContent='$'+state.ante;
+  els.tripsVal.textContent='$'+state.trips;
   els.hands.textContent=state.hands;
   const ip=state.bets.ante+state.bets.blind+state.bets.play+state.bets.trips;
   els.inplay.textContent='$'+ip;
@@ -770,14 +786,15 @@ function setControls(...buttons){
 // ====== Fichas simuladas (drag & drop) ======
 const CHIP_COLORS={5:'#5ad97a',25:'#41a6f6',100:'#ef476f',500:'#b08bff'};
 
-// Reserva obligatoria al repartir: Ante + Blind (+ Trips) + apuesta MÁXIMA de Play (4×).
+// Reserva obligatoria al repartir: Ante + Blind + apuesta MÁXIMA de Play (4×), más el Trips aparte.
 // Así garantizamos que SIEMPRE puedas respaldar tu jugada en los tres momentos
 // (4× pre-flop, 2× flop, 1× river) sin quedarte sin fichas a medias.
-const PLAY_MAX_MULT = 4;
-function reserveMult(){ return 2 + PLAY_MAX_MULT + (state.useTrips?1:0); } // =6 (o 7 con Trips)
-function maxAnte(){ return Math.max(0, Math.min(500, Math.floor(state.bankroll/reserveMult()/5)*5)); }
+const ANTE_RESERVE = 6; // Ante(1) + Blind(1) + Play máx(4×), en unidades de Ante
+function reserveNeeded(){ return state.ante*ANTE_RESERVE + state.trips; }
+function maxAnte(){ return Math.max(0, Math.min(500, Math.floor((state.bankroll - state.trips)/ANTE_RESERVE/5)*5)); }
+function maxTrips(){ return Math.max(0, Math.min(500, Math.floor((state.bankroll - state.ante*ANTE_RESERVE)/5)*5)); }
 function capNote(cap){
-  setMsg(`<span class="lose">Tope de apuesta base: $${cap}.</span> Debe cubrir Ante+Blind${state.useTrips?'+Trips':''} <b>y</b> la apuesta máxima de Play (4×), para respaldarla en los tres momentos.`);
+  setMsg(`<span class="lose">Tope de apuesta base: $${cap}.</span> Tu Ante debe dejar fichas para Ante+Blind <b>y</b> la apuesta máxima de Play (4×). Baja el Ante o reduce Trips.`);
 }
 
 function addChip(val){
@@ -797,35 +814,37 @@ function renderChipStack(){
   stack.innerHTML=html;
 }
 function syncBet(){
+  state.trips=Math.max(0,Math.min(maxTrips(),state.trips));
   state.ante=Math.max(0,Math.min(maxAnte(),state.ante));
   els.anteVal.textContent='$'+state.ante;
+  els.tripsVal.textContent='$'+state.trips;
   const dc=$('dcAmt'); if(dc) dc.textContent='$'+state.ante;
   renderChipStack();
   if(state.stage==='idle'){
-    state.bets={ante:state.ante, blind:state.ante, play:0, trips: state.useTrips?state.ante:0};
+    state.bets={ante:state.ante, blind:state.ante, play:0, trips:state.trips};
     refreshHUD();
   }
   const dealBtn=els.controls.querySelector('button.go');
   if(dealBtn){
-    const need=state.ante*reserveMult(); // Ante+Blind(+Trips)+4× Play
-    dealBtn.disabled = state.ante<5 || state.bankroll<need;
+    dealBtn.disabled = state.ante<5 || state.bankroll<reserveNeeded();
   }
+  saveState();
 }
 
 // --- Inicio de mano ---
 function deal(){
-  if(state.ante<5){ setMsg('<span class="lose">Arrastra al menos una ficha ($5 mínimo) al círculo.</span>'); return; }
-  const need = state.ante*reserveMult(); // Ante+Blind(+Trips)+4× Play
-  if(state.bankroll < need){ capNote(maxAnte()); return; }
+  if(state.ante<5){ setMsg('<span class="lose">Pon al menos una ficha ($5 mínimo) en el Ante.</span>'); return; }
+  if(state.bankroll < reserveNeeded()){ capNote(maxAnte()); return; }
   $('tray').style.display='none';
   Sound.deal();
   state.deck=newDeck();
   state.player=[state.deck.pop(),state.deck.pop()];
   state.dealer=[state.deck.pop(),state.deck.pop()];
   state.board=[state.deck.pop(),state.deck.pop(),state.deck.pop(),state.deck.pop(),state.deck.pop()];
-  state.bets={ante:state.ante, blind:state.ante, play:0, trips: state.useTrips?state.ante:0};
+  state.bets={ante:state.ante, blind:state.ante, play:0, trips:state.trips};
+  state.handStart=state.bankroll; // para el neto de la mano
   state.bankroll -= state.bets.ante+state.bets.blind+state.bets.trips;
-  state.stage='preflop'; state.playMade=false; state.hands++;
+  state.stage='preflop'; state.hands++;
 
   renderCards(els.playerCards,state.player);
   renderCards(els.dealerCards,state.dealer,{hideAll:true});
@@ -833,19 +852,21 @@ function deal(){
   els.boardStage.textContent='pre-flop';
   refreshHUD();
 
-  setMsg('<b>PRE-FLOP.</b> ¿Apuestas 4× ahora o esperas (check)?');
+  setMsg('<b>PRE-FLOP.</b> ¿Apuestas 4×/3× ahora o esperas (check)?');
   setHint(coachLine(state.player, [], 'preflop'));
   setControls(
     btn('Apostar 4×','go',()=>makePlay(4)),
-    btn('Check','cool',()=>{Sound.check();goFlop();})
+    btn('Apostar 3×','',()=>makePlay(3)),
+    btn('Check','cool',()=>{recordPlay(false);Sound.check();goFlop();})
   );
 }
 
 function makePlay(mult){
   const amt=state.ante*mult;
   if(state.bankroll<amt){ setMsg('<span class="lose">No tienes fichas para esa apuesta.</span>'); return; }
+  recordPlay(true); // apostaste
   state.bankroll-=amt;
-  state.bets.play=amt; state.playMade=true;
+  state.bets.play=amt;
   Sound.bet();
   refreshHUD();
   showdown();
@@ -859,7 +880,7 @@ function goFlop(){
   setHint(coachLine(state.player, state.board.slice(0,3), 'flop'));
   setControls(
     btn('Apostar 2×','go',()=>makePlay(2)),
-    btn('Check','cool',()=>{Sound.check();goRiver();})
+    btn('Check','cool',()=>{recordPlay(false);Sound.check();goRiver();})
   );
 }
 
@@ -871,7 +892,7 @@ function goRiver(){
   setHint(coachLine(state.player, state.board, 'river'));
   setControls(
     btn('Apostar 1×','go',()=>makePlay(1)),
-    btn('Fold','danger',()=>fold())
+    btn('Fold','danger',()=>{recordPlay(false);fold();})
   );
 }
 
@@ -895,10 +916,10 @@ function revealAndScore(folded){
   const pEval=evaluate7([...state.player,...state.board]);
   const dEval=evaluate7([...state.dealer,...state.board]);
 
-  // marca cartas ganadoras del jugador
+  // marca cartas ganadoras del jugador y voltea las del dealer
   const winSet=new Set(pEval.cards.map(c=>c.r+c.s));
   renderCards(els.playerCards,state.player,{winners:winSet});
-  renderCards(els.dealerCards,state.dealer);
+  renderCards(els.dealerCards,state.dealer,{flip:true});
 
   let log=[];
   let net=0; // ganancia neta sobre lo ya descontado del bankroll
@@ -957,13 +978,17 @@ function revealAndScore(folded){
 }
 
 function finish(headline, log){
+  state.net += state.bankroll - state.handStart; // neto de esta mano
+  saveState();
   refreshHUD();
   setMsg(headline);
-  setHint('<b>Resumen:</b> '+log.join(' · '));
+  setHint('<b>Resumen:</b> '+log.join(' · ')+'<br>'+statsLine());
+  wireResetButton();
   const next=btn('Nueva mano','go',()=>{Sound.ui();readyState();});
   if(state.bankroll<30){ // ni para la mano mínima completa ($5 ante × 6)
-    setControls(btn('Reiniciar bankroll','cool',()=>{state.bankroll=1000;readyState();}));
-    setHint('<span class="lose">¡Sin fondos! Reinicia para seguir.</span>');
+    setControls(btn('Recargar bankroll ($1000)','cool',()=>{state.bankroll=1000;saveState();readyState();}));
+    setHint('<span class="lose">¡Sin fondos!</span> Recarga para seguir.<br>'+statsLine());
+    wireResetButton();
   } else {
     setControls(next);
   }
@@ -977,20 +1002,22 @@ function readyState(){
   renderCards(els.boardCards,[]);
   els.boardStage.textContent='—';
   $('tray').style.display='';
-  setMsg('Arrastra fichas al círculo <b>ANTE+BLIND</b> (o haz clic en ellas) y pulsa <b>REPARTIR</b>.');
-  setHint('<b>Trips ✦</b> es una apuesta lateral opcional con ~6% de ventaja de la casa. '+
-          (state.useTrips?'<span class="win">Activada</span>':'Desactivada')+'. '+
-          `Tope de apuesta base: <b>$${maxAnte()}</b> (deja fichas para respaldar hasta 4×).`);
+  setMsg('Pon tu <b>Ante</b> con las fichas (tócalas o arrástralas), ajusta <b>Trips ✦</b> en el resumen si quieres y pulsa <b>REPARTIR</b>.');
+  setHint(`<b>Trips ✦</b>: apuesta lateral independiente (paga desde trío). Tope de apuesta base: <b>$${maxAnte()}</b> (deja fichas para respaldar hasta 4×).<br>${statsLine()}`);
   setControls(
-    btn('🎴 Repartir','go',()=>deal()),
-    btn(state.useTrips?'Trips: ON ✦':'Trips: OFF','cool',()=>{Sound.ui();state.useTrips=!state.useTrips;readyState();})
+    btn('🎴 Repartir','go',()=>deal())
   );
+  wireResetButton();
   syncBet();
 }
 
 // --- Controles de apuesta base (+/- siguen funcionando, sincronizados con las fichas) ---
 $('antePlus').onclick=()=>{ if(state.stage==='idle'){ const cap=maxAnte(); if(state.ante>=cap){ Sound.clear(); capNote(cap); return; } state.ante=Math.min(cap,state.ante+5); syncBet(); } };
 $('anteMinus').onclick=()=>{ if(state.stage==='idle'){ state.ante=Math.max(0,state.ante-5); syncBet(); } };
+
+// --- Controles de la apuesta lateral Trips (independiente del Ante) ---
+$('tripsPlus').onclick=()=>{ if(state.stage==='idle'){ const cap=maxTrips(); if(state.trips>=cap){ Sound.clear(); return; } state.trips=Math.min(cap,state.trips+5); Sound.chip(); syncBet(); } };
+$('tripsMinus').onclick=()=>{ if(state.stage==='idle'){ state.trips=Math.max(0,state.trips-5); syncBet(); } };
 
 // --- Listeners de fichas (drag, drop y clic) ---
 document.querySelectorAll('.chip-token').forEach(ch=>{
@@ -1022,7 +1049,61 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&b) b.click();
 });
 
+// =========================================================
+//  ESTADÍSTICAS DE SESIÓN + PERSISTENCIA (localStorage)
+// =========================================================
+function recordPlay(playerBet){
+  state.decisions++;
+  if(playerBet===state.recBet) state.followed++;
+}
+function statsLine(){
+  const pct = state.decisions ? Math.round(state.followed/state.decisions*100) : 0;
+  const netCls = state.net>=0 ? 'win' : 'lose';
+  const netStr = (state.net>=0?'+':'-')+'$'+Math.abs(state.net);
+  return `<span style="color:var(--panel-lt)">Sesión:</span> <b>${state.hands}</b> manos · `+
+    `Neto <b class="${netCls}">${netStr}</b> · `+
+    `Coach <b>${pct}%</b> (${state.followed}/${state.decisions}) `+
+    `<button id="resetSession" style="font-size:11px;padding:2px 7px;vertical-align:middle">↺ Reiniciar sesión</button>`;
+}
+// Re-conecta el botón de reinicio cada vez que se reescribe el hint
+function wireResetButton(){
+  const rb=$('resetSession');
+  if(rb) rb.onclick=()=>{ Sound.ui(); resetSession(); };
+}
+function resetSession(){
+  state.bankroll=1000; state.ante=10; state.trips=0;
+  state.hands=0; state.net=0; state.decisions=0; state.followed=0;
+  saveState();
+  readyState();
+}
+
+const SAVE_KEY='hdd_uth_v1';
+function saveState(){
+  try{
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      bankroll:state.bankroll, ante:state.ante, trips:state.trips,
+      hands:state.hands, net:state.net, decisions:state.decisions, followed:state.followed
+    }));
+  }catch(e){/* localStorage no disponible: el juego sigue funcionando en memoria */}
+}
+function loadState(){
+  try{
+    const s=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');
+    if(s && typeof s==='object'){
+      state.bankroll = Number.isFinite(s.bankroll)? s.bankroll : 1000;
+      state.ante     = Number.isFinite(s.ante)? s.ante : 10;
+      state.trips    = Number.isFinite(s.trips)? s.trips : 0;
+      state.hands    = Number.isFinite(s.hands)? s.hands : 0;
+      state.net      = Number.isFinite(s.net)? s.net : 0;
+      state.decisions= Number.isFinite(s.decisions)? s.decisions : 0;
+      state.followed = Number.isFinite(s.followed)? s.followed : 0;
+      if(state.bankroll<30) state.bankroll=1000; // rescata partidas sin fondos
+    }
+  }catch(e){/* datos corruptos: arrancamos por defecto */}
+}
+
 // Arranque
+loadState();
 readyState();
 </script>
 </body>

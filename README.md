@@ -17,13 +17,16 @@ python3 -m http.server 8123
 
 ## ✨ Características
 
-- **Reglas reales de Ultimate Texas Hold'em**: apuestas Ante + Blind, apuesta lateral Trips opcional, y las 3 decisiones de Play (4× pre-flop, 2× flop, 1× river, o fold).
+- **Reglas reales de Ultimate Texas Hold'em**: Ante + Blind, las 3 decisiones de Play (**3× o 4×** pre-flop, 2× flop, 1× river, o fold) y apuesta lateral **Trips independiente** (la fijas aparte, paga desde trío gane o pierda la mano).
 - **Evaluador de manos** propio (mejor de 5 entre 7 cartas) con desempates correctos.
 - **Tablas de pago correctas**: el Ante hace *push* si el dealer no liga; el Blind paga según tu mano (1:1 escalera → 500:1 escalera real).
-- **Fichas simuladas**: arrastra fichas de $5/$25/$100/$500 al círculo Ante+Blind (o haz clic).
-- **Coach de estrategia**: en cada decisión muestra la jugada óptima.
-- **Probabilidades en vivo**: simulación Monte Carlo (1.400 manos/decisión) con tu % de ganar / empatar / perder y barra visual.
+- **Coach por Valor Esperado (EV)**: en cada decisión calcula el EV real de apostar vs. esperar/retirarse y recomienda la de mayor EV — exacto en el river (enumera las 990 manos del dealer), Monte Carlo en pre-flop/flop. La sugerencia siempre concuerda con las probabilidades mostradas.
+- **Tope de apuesta inteligente**: nunca te deja apostar un Ante que luego no puedas respaldar con el Play máximo (4×) en los tres momentos.
+- **Fichas simuladas**: toca o arrastra fichas de $5/$25/$100/$500 al Ante; stepper aparte para el Trips.
+- **Estadísticas de sesión**: manos jugadas, neto acumulado y **% de adherencia al coach**, con reinicio.
+- **Persistencia**: el bankroll y las estadísticas se guardan en `localStorage` entre sesiones.
 - **Sonidos 8-bit** (Web Audio) en cada acción, con botón para silenciar 🔊/🔇.
+- **Animaciones**: reparto y volteo de las cartas del dealer al mostrar.
 - **Responsivo**: jugable en escritorio y móvil (iPhone).
 
 ## 🛠️ Stack
