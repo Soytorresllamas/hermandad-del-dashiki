@@ -697,9 +697,22 @@ function setControls(...buttons){
 
 // ====== Fichas simuladas (drag & drop) ======
 const CHIP_COLORS={5:'#5ad97a',25:'#41a6f6',100:'#ef476f',500:'#b08bff'};
+
+// Reserva obligatoria al repartir: Ante + Blind (+ Trips) + apuesta MÁXIMA de Play (4×).
+// Así garantizamos que SIEMPRE puedas respaldar tu jugada en los tres momentos
+// (4× pre-flop, 2× flop, 1× river) sin quedarte sin fichas a medias.
+const PLAY_MAX_MULT = 4;
+function reserveMult(){ return 2 + PLAY_MAX_MULT + (state.useTrips?1:0); } // =6 (o 7 con Trips)
+function maxAnte(){ return Math.max(0, Math.min(500, Math.floor(state.bankroll/reserveMult()/5)*5)); }
+function capNote(cap){
+  setMsg(`<span class="lose">Tope de apuesta base: $${cap}.</span> Debe cubrir Ante+Blind${state.useTrips?'+Trips':''} <b>y</b> la apuesta máxima de Play (4×), para respaldarla en los tres momentos.`);
+}
+
 function addChip(val){
   if(state.stage!=='idle') return;
-  state.ante=Math.min(500, state.ante+val);
+  const cap=maxAnte();
+  if(state.ante>=cap){ Sound.clear(); capNote(cap); return; }
+  state.ante=Math.min(cap, state.ante+val);
   Sound.chip();
   syncBet();
 }
@@ -712,7 +725,7 @@ function renderChipStack(){
   stack.innerHTML=html;
 }
 function syncBet(){
-  state.ante=Math.max(0,Math.min(500,state.ante));
+  state.ante=Math.max(0,Math.min(maxAnte(),state.ante));
   els.anteVal.textContent='$'+state.ante;
   const dc=$('dcAmt'); if(dc) dc.textContent='$'+state.ante;
   renderChipStack();
@@ -722,7 +735,7 @@ function syncBet(){
   }
   const dealBtn=els.controls.querySelector('button.go');
   if(dealBtn){
-    const need=state.ante*2+(state.useTrips?state.ante:0);
+    const need=state.ante*reserveMult(); // Ante+Blind(+Trips)+4× Play
     dealBtn.disabled = state.ante<5 || state.bankroll<need;
   }
 }
@@ -755,8 +768,8 @@ function probLine(player, board){
 // --- Inicio de mano ---
 function deal(){
   if(state.ante<5){ setMsg('<span class="lose">Arrastra al menos una ficha ($5 mínimo) al círculo.</span>'); return; }
-  const need = state.ante*2 + (state.useTrips?state.ante:0);
-  if(state.bankroll < need){ setMsg('<span class="lose">Bankroll insuficiente para esta apuesta.</span>'); return; }
+  const need = state.ante*reserveMult(); // Ante+Blind(+Trips)+4× Play
+  if(state.bankroll < need){ capNote(maxAnte()); return; }
   $('tray').style.display='none';
   Sound.deal();
   state.deck=newDeck();
@@ -904,7 +917,7 @@ function finish(headline, log){
   setMsg(headline);
   setHint('<b>Resumen:</b> '+log.join(' · '));
   const next=btn('Nueva mano','go',()=>{Sound.ui();readyState();});
-  if(state.bankroll<state.ante*2){
+  if(state.bankroll<30){ // ni para la mano mínima completa ($5 ante × 6)
     setControls(btn('Reiniciar bankroll','cool',()=>{state.bankroll=1000;readyState();}));
     setHint(getHintBase()+' <span class="lose">¡Sin fondos! Reinicia para seguir.</span>');
   } else {
@@ -926,7 +939,8 @@ function readyState(){
   $('tray').style.display='';
   setMsg('Arrastra fichas al círculo <b>ANTE+BLIND</b> (o haz clic en ellas) y pulsa <b>REPARTIR</b>.');
   setHint('<b>Trips ✦</b> es una apuesta lateral opcional con ~6% de ventaja de la casa. '+
-          (state.useTrips?'<span class="win">Activada</span>':'Desactivada')+'.');
+          (state.useTrips?'<span class="win">Activada</span>':'Desactivada')+'. '+
+          `Tope de apuesta base: <b>$${maxAnte()}</b> (deja fichas para respaldar hasta 4×).`);
   setControls(
     btn('🎴 Repartir','go',()=>deal()),
     btn(state.useTrips?'Trips: ON ✦':'Trips: OFF','cool',()=>{Sound.ui();state.useTrips=!state.useTrips;readyState();})
@@ -935,7 +949,7 @@ function readyState(){
 }
 
 // --- Controles de apuesta base (+/- siguen funcionando, sincronizados con las fichas) ---
-$('antePlus').onclick=()=>{ if(state.stage==='idle'){ state.ante=Math.min(500,state.ante+5); syncBet(); } };
+$('antePlus').onclick=()=>{ if(state.stage==='idle'){ const cap=maxAnte(); if(state.ante>=cap){ Sound.clear(); capNote(cap); return; } state.ante=Math.min(cap,state.ante+5); syncBet(); } };
 $('anteMinus').onclick=()=>{ if(state.stage==='idle'){ state.ante=Math.max(0,state.ante-5); syncBet(); } };
 
 // --- Listeners de fichas (drag, drop y clic) ---
