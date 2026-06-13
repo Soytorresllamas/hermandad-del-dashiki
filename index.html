@@ -250,18 +250,22 @@
   .dc-amt{font-size:24px}
   details{margin-bottom:8px}
 
-  /* ====== Rejilla: [Resumen | Fichas] en dos columnas ====== */
-  .info-grid{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;
-    width:100%;max-width:900px;margin-bottom:8px}
-  .info-grid .hint{flex:1 1 300px;margin:0;display:block;align-self:center}
-  .info-grid .tray{flex:1 1 360px;margin:0;display:flex;flex-direction:column;justify-content:center}
-  .info-grid .tray-title{margin-bottom:6px}
-
-  /* ====== Fila inferior: [Resumen/HUD | Botones] ====== */
+  /* ====== Fila inferior: [Resumen/HUD | Fichas+Botones] ====== */
   .action-row{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;
     width:100%;max-width:900px;margin:14px 0}
-  .action-row .hud{flex:1 1 380px;margin:0}
-  .action-row .controls{flex:1 1 320px;margin:0;align-content:center}
+  .action-row .hud{flex:1 1 340px;margin:0}
+  .play-col{flex:1 1 360px;display:flex;flex-direction:column;gap:8px}
+  .play-col .controls{margin:0;align-content:center}
+
+  /* ====== Tray compacto (fichas pequeñas junto a los botones) ====== */
+  .play-col .tray{margin:0;padding:7px 8px}
+  .play-col .tray-row{gap:12px;justify-content:center}
+  .play-col .rack{gap:4px}
+  .play-col .chip-token{width:32px;height:32px;font-size:10px;border-width:2px;border-style:dashed}
+  .play-col .chip-token.c500{font-size:8px}
+  .play-col .drop-circle{width:52px;height:52px;border-width:3px}
+  .play-col .dc-amt{font-size:15px;margin:0}
+  .play-col #clearBet{padding:6px 10px;font-size:14px}
 
   /* ====== Botones de acción más grandes y centrados ====== */
   .controls{gap:16px;margin:16px 0;justify-content:center}
@@ -302,10 +306,8 @@
     .dc-amt{font-size:18px}
     .dc-label{font-size:9px}
     button{font-size:13px;padding:8px 12px}
-    .info-grid{gap:8px;margin-bottom:6px}
-    .info-grid .hint,.info-grid .tray{flex:1 1 100%}
     .action-row{gap:8px;margin:10px 0}
-    .action-row .hud,.action-row .controls{flex:1 1 100%}
+    .action-row .hud,.play-col{flex:1 1 100%}
     .controls{gap:10px;margin:12px 0}
     .controls button{font-size:16px;padding:14px 20px;min-width:128px}
     .bet-spot{min-width:54px;padding:4px 6px}
@@ -362,27 +364,7 @@
   <div class="subtitle crest-sub">★ Ultimate Texas ★</div>
   <div class="edition">16-BIT CASINO EDITION</div>
 
-  <div class="info-grid">
-    <div class="hint pixel-border" id="strategyHint"></div>
-
-    <div class="tray pixel-border" id="tray">
-      <div class="tray-title">🪙 Arrastra fichas al círculo · Ante = Blind</div>
-      <div class="tray-row">
-        <div class="rack">
-          <div class="chip-token c5"   draggable="true" data-val="5">$5</div>
-          <div class="chip-token c25"  draggable="true" data-val="25">$25</div>
-          <div class="chip-token c100" draggable="true" data-val="100">$100</div>
-          <div class="chip-token c500" draggable="true" data-val="500">$500</div>
-        </div>
-        <div class="drop-circle" id="dropCircle">
-          <div class="dc-label">Ante + Blind</div>
-          <div class="dc-amt" id="dcAmt">$0</div>
-          <div class="dc-stack" id="dcStack"></div>
-        </div>
-        <button id="clearBet" class="danger" style="padding:8px 14px">Limpiar</button>
-      </div>
-    </div>
-  </div>
+  <div class="hint pixel-border" id="strategyHint"></div>
 
   <div class="msg pixel-border" id="message">Pon tu apuesta base y pulsa <b>REPARTIR</b> para empezar.</div>
 
@@ -419,7 +401,23 @@
       <div><div class="label">En juego</div><span class="chip" id="inplay">$0</span></div>
       <div><div class="label">Manos</div><span id="hands" style="color:var(--white)">0</span></div>
     </div>
-    <div class="controls" id="controls"></div>
+    <div class="play-col">
+      <div class="tray pixel-border" id="tray">
+        <div class="tray-row">
+          <div class="rack">
+            <div class="chip-token c5"   draggable="true" data-val="5">$5</div>
+            <div class="chip-token c25"  draggable="true" data-val="25">$25</div>
+            <div class="chip-token c100" draggable="true" data-val="100">$100</div>
+            <div class="chip-token c500" draggable="true" data-val="500">$500</div>
+          </div>
+          <div class="drop-circle" id="dropCircle" title="Ante + Blind">
+            <div class="dc-amt" id="dcAmt">$0</div>
+          </div>
+          <button id="clearBet" class="danger" title="Limpiar">✕</button>
+        </div>
+      </div>
+      <div class="controls" id="controls"></div>
+    </div>
   </div>
 
   <details class="pixel-border" style="padding:10px;margin-top:12px">
