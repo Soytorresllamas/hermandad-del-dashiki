@@ -195,7 +195,6 @@
 
   /* ====== Bandeja de fichas ====== */
   .tray{width:100%;max-width:900px;background:var(--panel);padding:14px;margin-bottom:12px}
-  .tray-title{font-size:14px;color:var(--gold);text-transform:uppercase;margin-bottom:12px;text-align:center}
   .tray-row{display:flex;align-items:center;justify-content:center;gap:24px;flex-wrap:wrap}
   .rack{display:flex;gap:10px}
   .chip-token{
@@ -221,10 +220,7 @@
     text-align:center;
   }
   .drop-circle.over{background:rgba(255,205,117,.35);border-style:solid}
-  .dc-label{font-size:11px;color:var(--gold);text-transform:uppercase}
   .dc-amt{font-size:28px;color:var(--white);font-weight:bold;margin:2px 0}
-  .dc-stack{display:flex;gap:2px;flex-wrap:wrap;justify-content:center;max-width:108px}
-  .dc-stack i{width:12px;height:12px;border-radius:50%;border:1px solid var(--ink);display:block}
 
   /* ====== Compactación ====== */
   body{padding:10px}
@@ -238,7 +234,6 @@
   .msg{padding:8px 12px;margin-bottom:8px;min-height:34px;font-size:15px}
   .table{padding:12px;margin-bottom:10px}
   .tray{padding:10px;margin-bottom:8px}
-  .tray-title{margin-bottom:8px}
   .tray-row{gap:16px}
   .seat{padding:6px;margin-bottom:6px}
   .cards{min-height:92px;gap:6px}
@@ -307,7 +302,6 @@
     .chip-token.c500{font-size:10px}
     .drop-circle{width:88px;height:88px;border-width:3px}
     .dc-amt{font-size:18px}
-    .dc-label{font-size:9px}
     button{font-size:13px;padding:8px 12px}
     .action-row{gap:8px;margin:10px 0}
     .action-row .hud,.play-col{flex:1 1 100%}
@@ -521,7 +515,7 @@ const els = {
   dealerCards:$('dealerCards'), boardCards:$('boardCards'), playerCards:$('playerCards'),
   boardStage:$('boardStage'),
   betAnte:$('betAnte'), betBlind:$('betBlind'), betPlay:$('betPlay'), betTrips:$('betTrips'),
-  spotAnte:$('spotAnte'), spotBlind:$('spotBlind'), spotPlay:$('spotPlay'), spotTrips:$('spotTrips'),
+  spotPlay:$('spotPlay'), spotTrips:$('spotTrips'),
   controls:$('controls'), hint:$('strategyHint')
 };
 
@@ -560,7 +554,7 @@ function renderCards(el, cards, opts={}){
 const CAT_NAME = ['Carta alta','Pareja','Doble pareja','Trío','Escalera','Color','Full','Póker','Escalera de color'];
 
 // Mejor mano de 5 cartas entre N (acepta 5, 6 o 7 cartas).
-function evaluate7(cards){
+function bestHand(cards){
   let best=null, bestCards=null;
   const n=cards.length;
   if(n<5) return {rank:[0], cards:[...cards], name:'—'}; // aún no hay 5 cartas
@@ -678,7 +672,7 @@ function riverBetHeuristic(pFullRank, player){
   return false;
 }
 function flopBetHeuristic(player, flop){
-  const ev=evaluate7([...player,...flop]).rank;
+  const ev=bestHand([...player,...flop]).rank;
   if(ev[0]>=2) return true;
   if(ev[0]===1 && player.some(c=>c.v===ev[1])) return true;
   return fourFlushWithHole(player, flop);
@@ -689,10 +683,10 @@ function riverEV(player, board){
   const used=new Set([...player,...board].map(c=>c.r+c.s));
   const rem=[];
   for(const s of SUITS) for(const r of RANKS){ if(!used.has(r+s)) rem.push({r,s,v:RVAL[r]}); }
-  const pRank=evaluate7([...player,...board]).rank;
+  const pRank=bestHand([...player,...board]).rank;
   let betSum=0,n=0,win=0,tie=0,lose=0;
   for(let i=0;i<rem.length;i++) for(let j=i+1;j<rem.length;j++){
-    const dRank=evaluate7([rem[i],rem[j],...board]).rank;
+    const dRank=bestHand([rem[i],rem[j],...board]).rank;
     const c=cmp(pRank,dRank);
     if(c>0)win++; else if(c<0)lose++; else tie++;
     betSum+=handNetUnits(pRank,dRank,1,false);
@@ -712,8 +706,8 @@ function rolloutEV(player, knownBoard, betMult, samples){
     for(let k=0;k<need;k++){ const j=k+(Math.random()*(rem.length-k)|0); const t=rem[k];rem[k]=rem[j];rem[j]=t; }
     const dealer=[rem[0],rem[1]];
     const full=knownBoard.concat(rem.slice(2,2+fill)); // 5 comunitarias finales
-    const pFull=evaluate7([...player,...full]).rank;
-    const dFull=evaluate7([...dealer,...full]).rank;
+    const pFull=bestHand([...player,...full]).rank;
+    const dFull=bestHand([...dealer,...full]).rank;
     const c=cmp(pFull,dFull);
     if(c>0)win++; else if(c<0)lose++; else tie++;
     // Apostar ahora (mult fijo) y llegar al showdown
@@ -784,8 +778,6 @@ function setControls(...buttons){
 }
 
 // ====== Fichas simuladas (drag & drop) ======
-const CHIP_COLORS={5:'#5ad97a',25:'#41a6f6',100:'#ef476f',500:'#b08bff'};
-
 // Reserva obligatoria al repartir: Ante + Blind + apuesta MÁXIMA de Play (4×), más el Trips aparte.
 // Así garantizamos que SIEMPRE puedas respaldar tu jugada en los tres momentos
 // (4× pre-flop, 2× flop, 1× river) sin quedarte sin fichas a medias.
@@ -805,21 +797,12 @@ function addChip(val){
   Sound.chip();
   syncBet();
 }
-function renderChipStack(){
-  const stack=$('dcStack'); if(!stack) return;
-  let amt=state.ante, html='';
-  for(const d of [500,100,25,5]){
-    while(amt>=d){ html+=`<i style="background:${CHIP_COLORS[d]}"></i>`; amt-=d; }
-  }
-  stack.innerHTML=html;
-}
 function syncBet(){
   state.trips=Math.max(0,Math.min(maxTrips(),state.trips));
   state.ante=Math.max(0,Math.min(maxAnte(),state.ante));
   els.anteVal.textContent='$'+state.ante;
   els.tripsVal.textContent='$'+state.trips;
   const dc=$('dcAmt'); if(dc) dc.textContent='$'+state.ante;
-  renderChipStack();
   if(state.stage==='idle'){
     state.bets={ante:state.ante, blind:state.ante, play:0, trips:state.trips};
     refreshHUD();
@@ -913,8 +896,8 @@ function revealAndScore(folded){
   renderCards(els.boardCards,state.board);
   els.boardStage.textContent='showdown';
 
-  const pEval=evaluate7([...state.player,...state.board]);
-  const dEval=evaluate7([...state.dealer,...state.board]);
+  const pEval=bestHand([...state.player,...state.board]);
+  const dEval=bestHand([...state.dealer,...state.board]);
 
   // marca cartas ganadoras del jugador y voltea las del dealer
   const winSet=new Set(pEval.cards.map(c=>c.r+c.s));
