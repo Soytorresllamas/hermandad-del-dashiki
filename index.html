@@ -257,6 +257,12 @@
   .info-grid .tray{flex:1 1 360px;margin:0;display:flex;flex-direction:column;justify-content:center}
   .info-grid .tray-title{margin-bottom:6px}
 
+  /* ====== Fila inferior: [Resumen/HUD | Botones] ====== */
+  .action-row{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;
+    width:100%;max-width:900px;margin:14px 0}
+  .action-row .hud{flex:1 1 380px;margin:0}
+  .action-row .controls{flex:1 1 320px;margin:0;align-content:center}
+
   /* ====== Botones de acción más grandes y centrados ====== */
   .controls{gap:16px;margin:16px 0;justify-content:center}
   .controls button{font-size:19px;padding:18px 34px;min-width:160px}
@@ -298,6 +304,8 @@
     button{font-size:13px;padding:8px 12px}
     .info-grid{gap:8px;margin-bottom:6px}
     .info-grid .hint,.info-grid .tray{flex:1 1 100%}
+    .action-row{gap:8px;margin:10px 0}
+    .action-row .hud,.action-row .controls{flex:1 1 100%}
     .controls{gap:10px;margin:12px 0}
     .controls button{font-size:16px;padding:14px 20px;min-width:128px}
     .bet-spot{min-width:54px;padding:4px 6px}
@@ -354,17 +362,6 @@
   <div class="subtitle crest-sub">★ Ultimate Texas ★</div>
   <div class="edition">16-BIT CASINO EDITION</div>
 
-  <div class="hud pixel-border">
-    <div><div class="label">Bankroll</div><span class="chip" id="bankroll">$1000</span></div>
-    <div><div class="label">Apuesta base</div>
-      <button id="anteMinus" style="padding:2px 8px">-</button>
-      <span id="anteVal" style="color:var(--gold);font-size:18px">$10</span>
-      <button id="antePlus" style="padding:2px 8px">+</button>
-    </div>
-    <div><div class="label">En juego</div><span class="chip" id="inplay">$0</span></div>
-    <div><div class="label">Manos</div><span id="hands" style="color:var(--white)">0</span></div>
-  </div>
-
   <div class="info-grid">
     <div class="hint pixel-border" id="strategyHint"></div>
 
@@ -411,7 +408,19 @@
     </div>
   </div>
 
-  <div class="controls" id="controls"></div>
+  <div class="action-row">
+    <div class="hud pixel-border">
+      <div><div class="label">Bankroll</div><span class="chip" id="bankroll">$1000</span></div>
+      <div><div class="label">Apuesta base</div>
+        <button id="anteMinus" style="padding:2px 8px">-</button>
+        <span id="anteVal" style="color:var(--gold);font-size:18px">$10</span>
+        <button id="antePlus" style="padding:2px 8px">+</button>
+      </div>
+      <div><div class="label">En juego</div><span class="chip" id="inplay">$0</span></div>
+      <div><div class="label">Manos</div><span id="hands" style="color:var(--white)">0</span></div>
+    </div>
+    <div class="controls" id="controls"></div>
+  </div>
 
   <details class="pixel-border" style="padding:10px;margin-top:12px">
     <summary>📖 Reglas y tablas de pago</summary>
