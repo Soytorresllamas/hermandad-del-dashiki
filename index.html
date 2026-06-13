@@ -167,7 +167,7 @@
     text-shadow:2px 2px 0 var(--shadow)}
   .edition{font-size:11px;color:var(--panel-lt);letter-spacing:3px;margin-bottom:14px}
   .msg{font-size:16px;line-height:1.6}
-  .hint{font-size:14px;color:#c9d4ec;line-height:1.7}
+  .hint{font-size:13px;color:#c9d4ec;line-height:1.6;letter-spacing:0}
   .hint b{color:#7cc4ff}
   .row-label{font-size:13px}
   .bet-spot .name{font-size:12px}
@@ -180,8 +180,8 @@
   table{font-size:13px}
 
   /* ====== Barra de probabilidad ====== */
-  .prob-bar{display:flex;width:100%;max-width:460px;height:16px;border:2px solid var(--ink);
-    margin-top:8px;overflow:hidden;border-radius:3px;box-shadow:1px 1px 0 var(--shadow)}
+  .prob-bar{display:inline-flex;width:80px;height:11px;border:2px solid var(--ink);
+    vertical-align:middle;margin-left:5px;overflow:hidden;border-radius:3px;box-shadow:1px 1px 0 var(--shadow)}
   .prob-bar i{display:block;height:100%}
   .prob-bar .pw{background:var(--green)}
   .prob-bar .pt{background:var(--gold)}
@@ -253,7 +253,7 @@
   /* ====== Rejilla: [Resumen | Fichas] en dos columnas ====== */
   .info-grid{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;
     width:100%;max-width:900px;margin-bottom:8px}
-  .info-grid .hint{flex:1 1 300px;margin:0;display:flex;flex-direction:column;justify-content:center}
+  .info-grid .hint{flex:1 1 300px;margin:0;display:block;align-self:center}
   .info-grid .tray{flex:1 1 360px;margin:0;display:flex;flex-direction:column;justify-content:center}
   .info-grid .tray-title{margin-bottom:6px}
 
@@ -748,10 +748,7 @@ function winProb(player, knownBoard, samples=1400){
 }
 function probLine(player, board){
   const {win,tie,lose}=winProb(player, board);
-  return `<b>Probabilidad de ganar la mano:</b> `+
-    `<span class="win">${win.toFixed(1)}%</span> ganar · `+
-    `${tie.toFixed(1)}% empate · `+
-    `<span class="lose">${lose.toFixed(1)}%</span> perder`+
+  return `<span class="win">${win.toFixed(0)}%</span> gana · ${tie.toFixed(0)}% empate · <span class="lose">${lose.toFixed(0)}%</span> pierde`+
     `<span class="prob-bar"><i class="pw" style="width:${win}%"></i>`+
     `<i class="pt" style="width:${tie}%"></i>`+
     `<i class="pl" style="width:${lose}%"></i></span>`;
@@ -780,7 +777,7 @@ function deal(){
 
   const adv=preflopAdvice(state.player);
   setMsg('<b>PRE-FLOP.</b> ¿Apuestas 4× ahora o esperas (check)?');
-  setHint(`<b>Sugerencia óptima:</b> ${adv?'APOSTAR 4× (mano fuerte)':'CHECK (mano débil, espera al flop)'}.<br>${probLine(state.player, [])}`);
+  setHint(`<b>Sugerencia:</b> ${adv?'APOSTAR 4× (fuerte)':'CHECK (espera al flop)'}<br>${probLine(state.player, [])}`);
   setControls(
     btn('Apostar 4×','go',()=>makePlay(4)),
     btn('Check','cool',()=>{Sound.check();goFlop();})
@@ -803,7 +800,7 @@ function goFlop(){
   els.boardStage.textContent='flop';
   const adv=flopAdvice(state.player,state.board.slice(0,3));
   setMsg('<b>FLOP.</b> ¿Apuestas 2× o esperas al river?');
-  setHint(`<b>Sugerencia óptima:</b> ${adv?'APOSTAR 2× (tienes con qué)':'CHECK (espera la última carta)'}.<br>${probLine(state.player, state.board.slice(0,3))}`);
+  setHint(`<b>Sugerencia:</b> ${adv?'APOSTAR 2× (tienes con qué)':'CHECK (espera la última carta)'}<br>${probLine(state.player, state.board.slice(0,3))}`);
   setControls(
     btn('Apostar 2×','go',()=>makePlay(2)),
     btn('Check','cool',()=>{Sound.check();goRiver();})
@@ -816,7 +813,7 @@ function goRiver(){
   els.boardStage.textContent='river';
   const adv=riverAdvice(state.player,state.board);
   setMsg('<b>RIVER.</b> Última decisión: apuesta 1× o retírate (pierdes Ante+Blind).');
-  setHint(`<b>Sugerencia óptima:</b> ${adv==='bet'?'APOSTAR 1× (ligas algo)':'FOLD (no ligas nada con tus cartas)'}.<br>${probLine(state.player, state.board)}`);
+  setHint(`<b>Sugerencia:</b> ${adv==='bet'?'APOSTAR 1× (ligas algo)':'FOLD (no ligas nada)'}<br>${probLine(state.player, state.board)}`);
   setControls(
     btn('Apostar 1×','go',()=>makePlay(1)),
     btn('Fold','danger',()=>fold())
